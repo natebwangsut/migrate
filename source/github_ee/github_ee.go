@@ -23,6 +23,7 @@ type GithubEE struct {
 
 func (g *GithubEE) Open(url string) (source.Driver, error) {
 	verifyTLS := true
+	subdomainIsolation := true
 
 	u, err := nurl.Parse(url)
 	if err != nil {
@@ -31,6 +32,10 @@ func (g *GithubEE) Open(url string) (source.Driver, error) {
 
 	if o := u.Query().Get("verify-tls"); o != "" {
 		verifyTLS = parseBool(o, verifyTLS)
+	}
+
+	if o := u.Query().Get("subdomain-isolation"); o != "" {
+		subdomainIsolation = parseBool(o, subdomainIsolation)
 	}
 
 	if u.User == nil {
@@ -42,7 +47,7 @@ func (g *GithubEE) Open(url string) (source.Driver, error) {
 		return nil, gh.ErrNoUserInfo
 	}
 
-	ghc, err := g.createGithubClient(u.Host, u.User.Username(), password, verifyTLS)
+	ghc, err := g.createGithubClient(u.Host, u.User.Username(), password, verifyTLS, subdomainIsolation)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +76,7 @@ func (g *GithubEE) Open(url string) (source.Driver, error) {
 	return &GithubEE{Driver: i}, nil
 }
 
-func (g *GithubEE) createGithubClient(host, username, password string, verifyTLS bool) (*github.Client, error) {
+func (g *GithubEE) createGithubClient(host, username, password string, verifyTLS bool, subdomainIsolation bool) (*github.Client, error) {
 	tr := &github.BasicAuthTransport{
 		Username: username,
 		Password: password,
@@ -82,6 +87,9 @@ func (g *GithubEE) createGithubClient(host, username, password string, verifyTLS
 
 	apiHost := fmt.Sprintf("https://%s/api/v3", host)
 	uploadHost := fmt.Sprintf("https://uploads.%s", host)
+	if !subdomainIsolation {
+		uploadHost = fmt.Sprintf("https://%s/api/uploads", host)
+	}
 
 	return github.NewEnterpriseClient(apiHost, uploadHost, tr.Client())
 }
